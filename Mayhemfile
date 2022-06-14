@@ -1,0 +1,4 @@
+project: verovio
+target: verovio
+cmds:
+  - cmd: /repo/cmake/build/verovio @@
