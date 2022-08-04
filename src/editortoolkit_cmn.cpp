@@ -34,10 +34,6 @@
 
 //--------------------------------------------------------------------------------
 
-#include "jsonxx.h"
-
-//--------------------------------------------------------------------------------
-
 #define CHAINED_ID "[chained-id]"
 
 namespace vrv {
@@ -269,8 +265,8 @@ bool EditorToolkitCMN::Insert(std::string &elementType, std::string const &start
 {
     if (!m_doc->GetDrawingPage()) return false;
 
-    Object *start = m_doc->GetDrawingPage()->FindDescendantByUuid(startid);
-    Object *end = m_doc->GetDrawingPage()->FindDescendantByUuid(endid);
+    Object *start = m_doc->GetDrawingPage()->FindDescendantByID(startid);
+    Object *end = m_doc->GetDrawingPage()->FindDescendantByID(endid);
     // Check if both start and end elements exist
     if (!start || !end) {
         LogMessage("Elements start and end ids '%s' and '%s' could not be found", startid.c_str(), endid.c_str());
@@ -311,8 +307,8 @@ bool EditorToolkitCMN::Insert(std::string &elementType, std::string const &start
     interface->SetStartid("#" + startid);
     interface->SetEndid("#" + endid);
 
-    m_chainedId = element->GetUuid();
-    m_editInfo.import("uuid", element->GetUuid());
+    m_chainedId = element->GetID();
+    m_editInfo.import("uuid", element->GetID());
 
     return true;
 }
@@ -321,7 +317,7 @@ bool EditorToolkitCMN::Insert(std::string &elementType, std::string const &start
 {
     if (!m_doc->GetDrawingPage()) return false;
 
-    Object *start = m_doc->GetDrawingPage()->FindDescendantByUuid(startid);
+    Object *start = m_doc->GetDrawingPage()->FindDescendantByID(startid);
     // Check if both start and end elements exist
     if (!start) {
         LogMessage("Element start id '%s' could not be found", startid.c_str());
@@ -357,8 +353,8 @@ bool EditorToolkitCMN::Insert(std::string &elementType, std::string const &start
     measure->AddChild(element);
     interface->SetStartid("#" + startid);
 
-    m_chainedId = element->GetUuid();
-    m_editInfo.import("uuid", element->GetUuid());
+    m_chainedId = element->GetID();
+    m_editInfo.import("uuid", element->GetID());
 
     return true;
 }
@@ -416,11 +412,11 @@ Object *EditorToolkitCMN::GetElement(std::string &elementId)
 
     // Try to get the element on the current drawing page
     if (m_doc->GetDrawingPage()) {
-        element = m_doc->GetDrawingPage()->FindDescendantByUuid(elementId);
+        element = m_doc->GetDrawingPage()->FindDescendantByID(elementId);
     }
     // If it wasn't there, try on the whole doc
     if (!element) {
-        element = m_doc->FindDescendantByUuid(elementId);
+        element = m_doc->FindDescendantByID(elementId);
     }
 
     return element;
@@ -440,7 +436,7 @@ bool EditorToolkitCMN::InsertNote(Object *object)
         assert(currentChord);
         Note *note = new Note();
         currentChord->AddChild(note);
-        m_chainedId = note->GetUuid();
+        m_chainedId = note->GetID();
         return true;
     }
     else if (object->Is(NOTE)) {
@@ -451,7 +447,7 @@ bool EditorToolkitCMN::InsertNote(Object *object)
         if (currentChord) {
             Note *note = new Note();
             currentChord->AddChild(note);
-            m_chainedId = note->GetUuid();
+            m_chainedId = note->GetID();
             return true;
         }
 
@@ -492,7 +488,7 @@ bool EditorToolkitCMN::InsertNote(Object *object)
         }
         currentNote->ClearRelinquishedChildren();
 
-        m_chainedId = note->GetUuid();
+        m_chainedId = note->GetID();
         return true;
     }
     else if (object->Is(REST)) {
@@ -504,7 +500,7 @@ bool EditorToolkitCMN::InsertNote(Object *object)
         assert(parent);
         parent->ReplaceChild(rest, note);
         delete rest;
-        m_chainedId = note->GetUuid();
+        m_chainedId = note->GetID();
         return true;
     }
     return false;
@@ -543,13 +539,13 @@ bool EditorToolkitCMN::DeleteNote(Note *note)
             for (auto &artic : artics) {
                 artic->MoveItselfTo(otherNote);
             }
-            m_chainedId = chord->GetUuid();
+            m_chainedId = chord->GetID();
             delete chord;
             return true;
         }
         else if (count > 2) {
             chord->DeleteChild(note);
-            m_chainedId = chord->GetUuid();
+            m_chainedId = chord->GetID();
             return true;
         }
         // Handle cases of chords with one single note
@@ -585,7 +581,7 @@ bool EditorToolkitCMN::DeleteNote(Note *note)
             beam->DetachChild(otherElement->GetIdx());
             parent->ReplaceChild(beam, otherElement);
             delete beam;
-            m_chainedId = rest->GetUuid();
+            m_chainedId = rest->GetID();
             return true;
         }
         if (beam->IsFirstIn(beam, note)) {
@@ -595,7 +591,7 @@ bool EditorToolkitCMN::DeleteNote(Note *note)
             assert(parent);
             parent->InsertBefore(beam, rest);
             beam->DeleteChild(note);
-            m_chainedId = rest->GetUuid();
+            m_chainedId = rest->GetID();
             return true;
         }
         else if (beam->IsLastIn(beam, note)) {
@@ -605,7 +601,7 @@ bool EditorToolkitCMN::DeleteNote(Note *note)
             assert(parent);
             parent->InsertAfter(beam, rest);
             beam->DeleteChild(note);
-            m_chainedId = rest->GetUuid();
+            m_chainedId = rest->GetID();
             return true;
         }
         else {
@@ -613,7 +609,7 @@ bool EditorToolkitCMN::DeleteNote(Note *note)
             rest->DurationInterface::operator=(*note);
             beam->ReplaceChild(note, rest);
             delete note;
-            m_chainedId = rest->GetUuid();
+            m_chainedId = rest->GetID();
             return true;
         }
     }
@@ -624,7 +620,7 @@ bool EditorToolkitCMN::DeleteNote(Note *note)
         assert(parent);
         parent->ReplaceChild(note, rest);
         delete note;
-        m_chainedId = rest->GetUuid();
+        m_chainedId = rest->GetID();
         return true;
     }
 }

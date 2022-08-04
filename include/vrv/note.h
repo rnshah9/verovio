@@ -8,7 +8,7 @@
 #ifndef __VRV_NOTE_H__
 #define __VRV_NOTE_H__
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -227,6 +227,11 @@ public:
     int GetMIDIPitch(int shift = 0) const;
 
     /**
+     * Get pitch class of the current note
+     */
+    int GetPitchClass() const;
+
+    /**
      * @name Checker, getter and setter for a note with which the stem is shared
      */
     ///@{
@@ -243,7 +248,7 @@ public:
 
     /**
      * Resovle @stem.sameas links by instanciating Note::m_stemSameas (*Note).
-     * Called twice from Object::PrepareLinks. Once to fill uuid / note pairs,
+     * Called twice from Object::PrepareLinks. Once to fill id / note pairs,
      * and once to resolve the link. The link is bi-directional, which means
      * that both notes have their m_stemSameas pointer instanciated.
      */
@@ -274,6 +279,11 @@ public:
      * Returns true if one note has a ledger line that collides (or is quite close) to the other note's stem
      */
     static bool HandleLedgerLineStemCollision(const Doc *doc, const Staff *staff, const Note *note1, const Note *note2);
+
+    /**
+     * Get pitch class based on the pitch name
+     */
+    static int PnameToPclass(data_PITCHNAME pitchName);
 
     //----------//
     // Functors //

@@ -9,28 +9,20 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 #include <iostream>
 #include <sstream>
 
 //----------------------------------------------------------------------------
 
 #include "bboxdevicecontext.h"
-#include "comparison.h"
-#include "devicecontext.h"
-#include "doc.h"
-#include "ftrem.h"
 #include "functorparams.h"
 #include "layer.h"
 #include "layerelement.h"
-#include "measure.h"
 #include "note.h"
 #include "options.h"
 #include "slur.h"
 #include "staff.h"
-#include "system.h"
-#include "timeinterface.h"
-#include "vrv.h"
 
 namespace vrv {
 
@@ -49,9 +41,9 @@ void View::DrawSlur(DeviceContext *dc, Slur *slur, int x1, int x2, Staff *staff,
     curve->GetPoints(points);
 
     if (graphic)
-        dc->ResumeGraphic(graphic, graphic->GetUuid());
+        dc->ResumeGraphic(graphic, graphic->GetID());
     else
-        dc->StartGraphic(slur, "", slur->GetUuid(), false);
+        dc->StartGraphic(slur, "", slur->GetID(), false);
 
     int penStyle = AxSOLID;
     switch (slur->GetLform()) {

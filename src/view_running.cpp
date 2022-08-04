@@ -9,7 +9,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -52,7 +52,7 @@ void View::DrawPgHeader(DeviceContext *dc, RunningElement *pgHeader)
     assert(dc);
     assert(pgHeader);
 
-    dc->StartGraphic(pgHeader, "", pgHeader->GetUuid());
+    dc->StartGraphic(pgHeader, "", pgHeader->GetID());
 
     FontInfo pgHeadTxt;
 

@@ -16,7 +16,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -87,14 +87,14 @@ AttArticulationGestural::~AttArticulationGestural()
 
 void AttArticulationGestural::ResetArticulationGestural()
 {
-    m_articGes = ARTICULATION_NONE;
+    m_articGes = std::vector<data_ARTICULATION>();
 }
 
 bool AttArticulationGestural::ReadArticulationGestural(pugi::xml_node element)
 {
     bool hasAttribute = false;
     if (element.attribute("artic.ges")) {
-        this->SetArticGes(StrToArticulation(element.attribute("artic.ges").value()));
+        this->SetArticGes(StrToArticulationList(element.attribute("artic.ges").value()));
         element.remove_attribute("artic.ges");
         hasAttribute = true;
     }
@@ -105,7 +105,7 @@ bool AttArticulationGestural::WriteArticulationGestural(pugi::xml_node element)
 {
     bool wroteAttribute = false;
     if (this->HasArticGes()) {
-        element.append_attribute("artic.ges") = ArticulationToStr(this->GetArticGes()).c_str();
+        element.append_attribute("artic.ges") = ArticulationListToStr(this->GetArticGes()).c_str();
         wroteAttribute = true;
     }
     return wroteAttribute;
@@ -113,7 +113,7 @@ bool AttArticulationGestural::WriteArticulationGestural(pugi::xml_node element)
 
 bool AttArticulationGestural::HasArticGes() const
 {
-    return (m_articGes != ARTICULATION_NONE);
+    return (m_articGes != std::vector<data_ARTICULATION>());
 }
 
 /* include <attartic.ges> */
@@ -180,9 +180,9 @@ AttDurationGestural::~AttDurationGestural()
 void AttDurationGestural::ResetDurationGestural()
 {
     m_durGes = DURATION_NONE;
-    m_dotsGes = -1;
+    m_dotsGes = VRV_UNSET;
     m_durMetrical = 0.0;
-    m_durPpq = 0;
+    m_durPpq = VRV_UNSET;
     m_durReal = 0.0;
     m_durRecip = "";
 }
@@ -260,7 +260,7 @@ bool AttDurationGestural::HasDurGes() const
 
 bool AttDurationGestural::HasDotsGes() const
 {
-    return (m_dotsGes != -1);
+    return (m_dotsGes != VRV_UNSET);
 }
 
 bool AttDurationGestural::HasDurMetrical() const
@@ -270,7 +270,7 @@ bool AttDurationGestural::HasDurMetrical() const
 
 bool AttDurationGestural::HasDurPpq() const
 {
-    return (m_durPpq != 0);
+    return (m_durPpq != VRV_UNSET);
 }
 
 bool AttDurationGestural::HasDurReal() const
@@ -348,7 +348,7 @@ void AttNcGes::ResetNcGes()
 {
     m_octGes = -127;
     m_pnameGes = PITCHNAME_NONE;
-    m_pnum = 0;
+    m_pnum = VRV_UNSET;
 }
 
 bool AttNcGes::ReadNcGes(pugi::xml_node element)
@@ -402,7 +402,7 @@ bool AttNcGes::HasPnameGes() const
 
 bool AttNcGes::HasPnum() const
 {
-    return (m_pnum != 0);
+    return (m_pnum != VRV_UNSET);
 }
 
 /* include <attpnum> */
@@ -425,7 +425,7 @@ void AttNoteGes::ResetNoteGes()
     m_extremis = noteGes_EXTREMIS_NONE;
     m_octGes = -127;
     m_pnameGes = PITCHNAME_NONE;
-    m_pnum = 0;
+    m_pnum = VRV_UNSET;
 }
 
 bool AttNoteGes::ReadNoteGes(pugi::xml_node element)
@@ -493,7 +493,7 @@ bool AttNoteGes::HasPnameGes() const
 
 bool AttNoteGes::HasPnum() const
 {
-    return (m_pnum != 0);
+    return (m_pnum != VRV_UNSET);
 }
 
 /* include <attpnum> */
@@ -817,7 +817,7 @@ bool Att::SetGestural(Object *element, const std::string &attrType, const std::s
         AttArticulationGestural *att = dynamic_cast<AttArticulationGestural *>(element);
         assert(att);
         if (attrType == "artic.ges") {
-            att->SetArticGes(att->StrToArticulation(attrValue));
+            att->SetArticGes(att->StrToArticulationList(attrValue));
             return true;
         }
     }
@@ -978,7 +978,7 @@ void Att::GetGestural(const Object *element, ArrayOfStrAttr *attributes)
         const AttArticulationGestural *att = dynamic_cast<const AttArticulationGestural *>(element);
         assert(att);
         if (att->HasArticGes()) {
-            attributes->push_back({ "artic.ges", att->ArticulationToStr(att->GetArticGes()) });
+            attributes->push_back({ "artic.ges", att->ArticulationListToStr(att->GetArticGes()) });
         }
     }
     if (element->HasAttClass(ATT_BENDGES)) {

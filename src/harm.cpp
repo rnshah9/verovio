@@ -9,7 +9,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -21,7 +21,6 @@
 #include "measure.h"
 #include "system.h"
 #include "text.h"
-#include "transposition.h"
 #include "verticalaligner.h"
 #include "vrv.h"
 
@@ -218,7 +217,7 @@ int Harm::AdjustHarmGrpsSpacing(FunctorParams *functorParams)
     // Something is probably not right if nothing found - maybe no @staff
     if (positioners.empty()) {
         LogDebug("Something was wrong when searching positioners for %s '%s'", this->GetClassName().c_str(),
-            this->GetUuid().c_str());
+            this->GetID().c_str());
         return FUNCTOR_SIBLINGS;
     }
 

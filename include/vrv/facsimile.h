@@ -8,7 +8,7 @@
 #ifndef __VRV_FACSIMILE_H__
 #define __VRV_FACSIMILE_H__
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -43,7 +43,7 @@ public:
     ///@}
     bool IsSupportedChild(Object *object) override;
 
-    Zone *FindZoneByUuid(std::string zoneId);
+    Zone *FindZoneByID(std::string zoneId);
     int GetMaxY();
     int GetMaxX();
 };

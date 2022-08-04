@@ -9,7 +9,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -116,6 +116,34 @@ bool EditorialElement::IsSupportedChild(Object *child)
 //----------------------------------------------------------------------------
 // EditorialElement functor methods
 //----------------------------------------------------------------------------
+
+int EditorialElement::Save(FunctorParams *functorParams)
+{
+    SaveParams *params = vrv_params_cast<SaveParams *>(functorParams);
+    assert(params);
+
+    // When writing MEI basic, only visible elements within editorial markup a saved
+    if (params->m_basic && this->m_visibility == Hidden) {
+        return FUNCTOR_SIBLINGS;
+    }
+    else {
+        return Object::Save(functorParams);
+    }
+}
+
+int EditorialElement::SaveEnd(FunctorParams *functorParams)
+{
+    SaveParams *params = vrv_params_cast<SaveParams *>(functorParams);
+    assert(params);
+
+    // Same as above
+    if (params->m_basic && this->m_visibility == Hidden) {
+        return FUNCTOR_SIBLINGS;
+    }
+    else {
+        return Object::SaveEnd(functorParams);
+    }
+}
 
 int EditorialElement::ConvertToPageBased(FunctorParams *functorParams)
 {

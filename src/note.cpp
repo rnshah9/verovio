@@ -10,7 +10,7 @@
 #include <iostream>
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
@@ -29,11 +29,11 @@
 #include "slur.h"
 #include "smufl.h"
 #include "staff.h"
+#include "stem.h"
 #include "syl.h"
 #include "tabgrp.h"
 #include "tie.h"
 #include "timemap.h"
-#include "transposition.h"
 #include "tuning.h"
 #include "verse.h"
 #include "vrv.h"
@@ -351,7 +351,7 @@ Point Note::GetStemUpSE(const Doc *doc, int staffSize, bool isCueSize) const
     int defaultYShift = doc->GetDrawingUnit(staffSize) / 4;
     if (isCueSize) defaultYShift = doc->GetCueSize(defaultYShift);
     // x default is always set to the right for now
-    int defaultXShift = doc->GetGlyphWidth(SMUFL_E0A3_noteheadHalf, staffSize, isCueSize);
+    int defaultXShift = doc->GetGlyphWidth(this->GetNoteheadGlyph(this->GetActualDur()), staffSize, isCueSize);
     Point p(defaultXShift, defaultYShift);
 
     // Here we should get the notehead value
@@ -567,18 +567,18 @@ void Note::ResolveStemSameas(PrepareLinkingParams *params)
 {
     assert(params);
 
-    // First pass we fill m_stemSameasUuidPairs
+    // First pass we fill m_stemSameasIDPairs
     if (params->m_fillList) {
         if (this->HasStemSameas()) {
-            std::string uuidTarget = ExtractUuidFragment(this->GetStemSameas());
-            params->m_stemSameasUuidPairs[uuidTarget] = this;
+            std::string idTarget = ExtractIDFragment(this->GetStemSameas());
+            params->m_stemSameasIDPairs[idTarget] = this;
         }
     }
     // Second pass we resolve links
     else {
-        const std::string uuid = this->GetUuid();
-        if (params->m_stemSameasUuidPairs.count(uuid)) {
-            Note *noteStemSameas = params->m_stemSameasUuidPairs.at(uuid);
+        const std::string id = this->GetID();
+        if (params->m_stemSameasIDPairs.count(id)) {
+            Note *noteStemSameas = params->m_stemSameasIDPairs.at(id);
             // Instanciate the bi-directional references and mark the roles as unset
             this->SetStemSameasNote(noteStemSameas);
             this->m_stemSameasRole = SAMEAS_UNSET;
@@ -599,7 +599,7 @@ void Note::ResolveStemSameas(PrepareLinkingParams *params)
                     beamStemSameas->SetStemSameasBeam(thisBeam);
                 }
             }
-            params->m_stemSameasUuidPairs.erase(uuid);
+            params->m_stemSameasIDPairs.erase(id);
         }
     }
 }
@@ -673,27 +673,12 @@ int Note::GetMIDIPitch(const int shift) const
         pitch = this->GetPnum();
     }
     else if (this->HasPname() || this->HasPnameGes()) {
-        int midiBase = 0;
-        data_PITCHNAME pname = this->GetPname();
-        if (this->HasPnameGes()) pname = this->GetPnameGes();
-        switch (pname) {
-            case PITCHNAME_c: midiBase = 0; break;
-            case PITCHNAME_d: midiBase = 2; break;
-            case PITCHNAME_e: midiBase = 4; break;
-            case PITCHNAME_f: midiBase = 5; break;
-            case PITCHNAME_g: midiBase = 7; break;
-            case PITCHNAME_a: midiBase = 9; break;
-            case PITCHNAME_b: midiBase = 11; break;
-            default: break;
-        }
-
-        // Check for accidentals
-        midiBase += this->GetChromaticAlteration();
+        const int pclass = this->GetPitchClass();
 
         int oct = this->GetOct();
         if (this->HasOctGes()) oct = this->GetOctGes();
 
-        pitch = midiBase + (oct + 1) * 12;
+        pitch = pclass + (oct + 1) * 12;
     }
     else if (this->HasTabCourse()) {
         // tablature
@@ -706,6 +691,20 @@ int Note::GetMIDIPitch(const int shift) const
 
     // Apply shift, i.e. from transposition instruments
     return pitch + shift;
+}
+
+int Note::GetPitchClass() const
+{
+    // if (this->HasPclass()) return this->GetPclass();
+
+    data_PITCHNAME pname = this->GetPname();
+    if (this->HasPnameGes()) pname = this->GetPnameGes();
+    int pitchClass = PnameToPclass(pname);
+
+    // Check for accidentals
+    pitchClass += this->GetChromaticAlteration();
+
+    return pitchClass;
 }
 
 int Note::GetChromaticAlteration() const
@@ -894,6 +893,20 @@ bool Note::HandleLedgerLineStemCollision(const Doc *doc, const Staff *staff, con
     return false;
 }
 
+int Note::PnameToPclass(data_PITCHNAME pitchName)
+{
+    switch (pitchName) {
+        case PITCHNAME_c: return 0; break;
+        case PITCHNAME_d: return 2; break;
+        case PITCHNAME_e: return 4; break;
+        case PITCHNAME_f: return 5; break;
+        case PITCHNAME_g: return 7; break;
+        case PITCHNAME_a: return 9; break;
+        case PITCHNAME_b: return 11; break;
+        default: return 0; break;
+    }
+}
+
 //----------------------------------------------------------------------------
 // Functors methods
 //----------------------------------------------------------------------------
@@ -922,12 +935,12 @@ int Note::ConvertMarkupAnalytical(FunctorParams *functorParams)
                 if (!params->m_permanent) {
                     tie->IsAttribute(true);
                 }
-                tie->SetStartid("#" + (*iter)->GetUuid());
-                tie->SetEndid("#" + this->GetUuid());
+                tie->SetStartid("#" + (*iter)->GetID());
+                tie->SetEndid("#" + this->GetID());
                 params->m_controlEvents.push_back(tie);
             }
             else {
-                LogWarning("Expected @tie median or terminal in note '%s', skipping it", this->GetUuid().c_str());
+                LogWarning("Expected @tie median or terminal in note '%s', skipping it", this->GetID().c_str());
             }
             iter = params->m_currentNotes.erase(iter);
             // we are done for this note
@@ -948,7 +961,7 @@ int Note::ConvertMarkupAnalytical(FunctorParams *functorParams)
 
     if (this->HasFermata()) {
         Fermata *fermata = new Fermata();
-        fermata->ConvertFromAnalyticalMarkup(this, this->GetUuid(), params);
+        fermata->ConvertFromAnalyticalMarkup(this, this->GetID(), params);
     }
 
     return FUNCTOR_CONTINUE;
@@ -1063,8 +1076,8 @@ int Note::CalcStem(FunctorParams *functorParams)
     if (this->HasStemSameasNote()) {
         stemDir = this->CalcStemDirForSameasNote(params->m_verticalCenter);
     }
-    else if (stem->HasStemDir()) {
-        stemDir = stem->GetStemDir();
+    else if (stem->HasDir()) {
+        stemDir = stem->GetDir();
     }
     else if (this->IsGraceNote()) {
         stemDir = STEMDIRECTION_up;
@@ -1093,37 +1106,20 @@ int Note::CalcStem(FunctorParams *functorParams)
 
 int Note::CalcChordNoteHeads(FunctorParams *functorParams)
 {
-    FunctorDocParams *params = vrv_params_cast<FunctorDocParams *>(functorParams);
+    CalcChordNoteHeadsParams *params = vrv_params_cast<CalcChordNoteHeadsParams *>(functorParams);
     assert(params);
 
     Staff *staff = this->GetAncestorStaff(RESOLVE_CROSS_STAFF);
     const int staffSize = staff->m_drawingStaffSize;
 
-    bool mixedCue = false;
-    if (Chord *chord = this->IsChordTone(); chord != NULL) {
-        mixedCue = (chord->GetDrawingCueSize() != this->GetDrawingCueSize());
+    const int diameter = 2 * this->GetDrawingRadius(params->m_doc);
+    int noteheadShift = 0;
+    if ((this->GetDrawingStemDir() == STEMDIRECTION_up) && (params->m_diameter)) {
+        noteheadShift = params->m_diameter - diameter;
     }
 
-    // Nothing to do for notes that are not in a cluster and without cue mixing
-    if (!m_cluster && !mixedCue) return FUNCTOR_SIBLINGS;
-
-    int diameter = 2 * this->GetDrawingRadius(params->m_doc);
-
-    // If chord consists partially of cue notes we may have to shift the noteheads
-    int cueShift = 0;
-    if (mixedCue && (this->GetDrawingStemDir() == STEMDIRECTION_up)) {
-        const double cueScaling = params->m_doc->GetCueScaling();
-        assert(cueScaling > 0.0);
-
-        if (this->GetDrawingCueSize()) {
-            // Note is cue and chord is not
-            cueShift = (1.0 / cueScaling - 1.0) * diameter; // shift to the right
-        }
-        else {
-            // Chord is cue and note is not
-            cueShift = (cueScaling - 1.0) * diameter; // shift to the left
-        }
-    }
+    // Nothing to do for notes that are not in a cluster and without base diameter for the chord
+    if (!params->m_diameter && !m_cluster) return FUNCTOR_SIBLINGS;
 
     /************** notehead direction **************/
 
@@ -1156,7 +1152,7 @@ int Note::CalcChordNoteHeads(FunctorParams *functorParams)
             this->SetDrawingXRel(-diameter + params->m_doc->GetDrawingStemWidth(staffSize));
         }
     }
-    this->SetDrawingXRel(this->GetDrawingXRel() + cueShift);
+    this->SetDrawingXRel(this->GetDrawingXRel() + noteheadShift);
 
     this->SetFlippedNotehead(flippedNotehead);
 
@@ -1218,7 +1214,7 @@ int Note::CalcDots(FunctorParams *functorParams)
         assert(dots);
 
         // Stem up, shorter than 4th and not in beam
-        if ((this->GetDots() != 0) && (params->m_chordStemDir == STEMDIRECTION_up) && (this->GetDrawingDur() > DUR_4)
+        if ((this->GetDots() > 0) && (params->m_chordStemDir == STEMDIRECTION_up) && (this->GetDrawingDur() > DUR_4)
             && !this->IsInBeam()) {
             // Shift according to the flag width if the top note is not flipped
             if ((this == chord->GetTopNote()) && !this->GetFlippedNotehead()) {
@@ -1309,11 +1305,12 @@ int Note::PrepareLayerElementParts(FunctorParams *functorParams)
     if (!this->IsChordTone() && !this->IsMensuralDur() && !this->IsTabGrpNote()) {
         if (!currentStem) {
             currentStem = new Stem();
+            currentStem->IsAttribute(true);
             this->AddChild(currentStem);
         }
         currentStem->AttGraced::operator=(*this);
-        currentStem->AttStems::operator=(*this);
-        currentStem->AttStemsCmn::operator=(*this);
+        currentStem->FillAttributes(*this);
+
         if (this->GetActualDur() < DUR_2 || (this->GetStemVisible() == BOOLEAN_false)) {
             currentStem->IsVirtual(true);
         }
@@ -1351,7 +1348,7 @@ int Note::PrepareLayerElementParts(FunctorParams *functorParams)
     if (this->GetDots() > 0) {
         if (chord && (chord->GetDots() == this->GetDots())) {
             LogWarning(
-                "Note '%s' with a @dots attribute with the same value as its chord parent", this->GetUuid().c_str());
+                "Note '%s' with a @dots attribute with the same value as its chord parent", this->GetID().c_str());
         }
         if (!currentDots) {
             currentDots = new Dots();
@@ -1530,7 +1527,7 @@ int Note::GenerateMIDI(FunctorParams *functorParams)
     // Store reference, i.e. for Nachschlag
     params->m_lastNote = this;
 
-    return FUNCTOR_SIBLINGS;
+    return FUNCTOR_CONTINUE;
 }
 
 int Note::GenerateTimemap(FunctorParams *functorParams)

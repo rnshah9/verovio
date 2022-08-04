@@ -9,7 +9,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 #include <math.h>
 
 //----------------------------------------------------------------------------
@@ -174,27 +174,37 @@ bool Layer::IsSupportedChild(Object *child)
     return true;
 }
 
-LayerElement *Layer::GetPrevious(LayerElement *element)
+LayerElement *Layer::GetPrevious(const LayerElement *element)
+{
+    return const_cast<LayerElement *>(std::as_const(*this).GetPrevious(element));
+}
+
+const LayerElement *Layer::GetPrevious(const LayerElement *element) const
 {
     this->ResetList(this);
     if (!element || this->HasEmptyList(this)) return NULL;
 
-    return dynamic_cast<LayerElement *>(this->GetListPrevious(element));
+    return dynamic_cast<const LayerElement *>(this->GetListPrevious(element));
 }
 
 LayerElement *Layer::GetAtPos(int x)
 {
-    Object *first = this->GetFirst();
+    return const_cast<LayerElement *>(std::as_const(*this).GetAtPos(x));
+}
+
+const LayerElement *Layer::GetAtPos(int x) const
+{
+    const Object *first = this->GetFirst();
     if (!first || !first->IsLayerElement()) return NULL;
 
-    LayerElement *element = vrv_cast<LayerElement *>(first);
+    const LayerElement *element = vrv_cast<const LayerElement *>(first);
     assert(element);
     if (element->GetDrawingX() > x) return NULL;
 
-    Object *next;
+    const Object *next;
     while ((next = this->GetNext())) {
         if (!next->IsLayerElement()) continue;
-        LayerElement *nextLayerElement = vrv_cast<LayerElement *>(next);
+        const LayerElement *nextLayerElement = vrv_cast<const LayerElement *>(next);
         assert(nextLayerElement);
         if (nextLayerElement->GetDrawingX() > x) return element;
         element = nextLayerElement;
@@ -203,7 +213,7 @@ LayerElement *Layer::GetAtPos(int x)
     return element;
 }
 
-Clef *Layer::GetClef(LayerElement *test)
+Clef *Layer::GetClef(const LayerElement *test)
 {
     return const_cast<Clef *>(std::as_const(*this).GetClef(test));
 }
@@ -234,7 +244,7 @@ const Clef *Layer::GetClef(const LayerElement *test) const
     return this->GetCurrentClef();
 }
 
-Clef *Layer::GetClefFacs(LayerElement *test)
+Clef *Layer::GetClefFacs(const LayerElement *test)
 {
     return const_cast<Clef *>(std::as_const(*this).GetClefFacs(test));
 }
@@ -601,7 +611,7 @@ int Layer::ConvertToCastOffMensural(FunctorParams *functorParams)
     params->m_targetLayer->ClearChildren();
     params->m_targetLayer->CloneReset();
     // Keep the xml:id of the layer in the first segment
-    params->m_targetLayer->SwapUuid(this);
+    params->m_targetLayer->SwapID(this);
     assert(params->m_targetStaff);
     params->m_targetStaff->AddChild(params->m_targetLayer);
 
@@ -643,6 +653,10 @@ int Layer::ResetHorizontalAlignment(FunctorParams *functorParams)
     }
     if (this->GetStaffDefMeterSig()) {
         this->GetStaffDefMeterSig()->ResetHorizontalAlignment(functorParams);
+    }
+    if (this->GetStaffDefMeterSigGrp()) {
+        Functor resetHorizontalAlignment(&Object::ResetHorizontalAlignment);
+        this->GetStaffDefMeterSigGrp()->Process(&resetHorizontalAlignment, NULL);
     }
 
     if (this->GetCautionStaffDefClef()) {
@@ -789,26 +803,26 @@ int Layer::InitOnsetOffset(FunctorParams *functorParams)
     return FUNCTOR_CONTINUE;
 }
 
-int Layer::FindElementInLayerStaffDefsByUUID(FunctorParams *functorParams) const
+int Layer::FindElementInLayerStaffDefsByID(FunctorParams *functorParams) const
 {
-    FindLayerUuidWithinStaffDefParams *params = vrv_params_cast<FindLayerUuidWithinStaffDefParams *>(functorParams);
+    FindLayerIDWithinStaffDefParams *params = vrv_params_cast<FindLayerIDWithinStaffDefParams *>(functorParams);
     assert(params);
 
     if (!this->HasStaffDef()) return FUNCTOR_SIBLINGS;
     // Get corresponding elements from the layer
-    if (this->GetStaffDefClef() && (this->GetStaffDefClef()->GetUuid() == params->m_uuid)) {
+    if (this->GetStaffDefClef() && (this->GetStaffDefClef()->GetID() == params->m_id)) {
         params->m_object = this->GetStaffDefClef();
     }
-    else if (this->GetStaffDefKeySig() && (this->GetStaffDefKeySig()->GetUuid() == params->m_uuid)) {
+    else if (this->GetStaffDefKeySig() && (this->GetStaffDefKeySig()->GetID() == params->m_id)) {
         params->m_object = this->GetStaffDefKeySig();
     }
-    else if (this->GetStaffDefMensur() && (this->GetStaffDefMensur()->GetUuid() == params->m_uuid)) {
+    else if (this->GetStaffDefMensur() && (this->GetStaffDefMensur()->GetID() == params->m_id)) {
         params->m_object = this->GetStaffDefMensur();
     }
-    else if (this->GetStaffDefMeterSig() && (this->GetStaffDefMeterSig()->GetUuid() == params->m_uuid)) {
+    else if (this->GetStaffDefMeterSig() && (this->GetStaffDefMeterSig()->GetID() == params->m_id)) {
         params->m_object = this->GetStaffDefMeterSig();
     }
-    else if (this->GetStaffDefMeterSigGrp() && (this->GetStaffDefMeterSigGrp()->GetUuid() == params->m_uuid)) {
+    else if (this->GetStaffDefMeterSigGrp() && (this->GetStaffDefMeterSigGrp()->GetID() == params->m_id)) {
         params->m_object = this->GetStaffDefMeterSigGrp();
     }
 

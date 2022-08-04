@@ -9,7 +9,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 #include <math.h>
 
 //----------------------------------------------------------------------------
@@ -22,7 +22,6 @@
 #include "comparison.h"
 #include "controlelement.h"
 #include "devicecontext.h"
-#include "doc.h"
 #include "editorial.h"
 #include "ending.h"
 #include "f.h"
@@ -47,9 +46,6 @@
 #include "reh.h"
 #include "smufl.h"
 #include "staff.h"
-#include "staffdef.h"
-#include "staffgrp.h"
-#include "syl.h"
 #include "system.h"
 #include "text.h"
 #include "tuplet.h"
@@ -169,17 +165,17 @@ void View::DrawPageElement(DeviceContext *dc, PageElement *element)
         PageMilestoneEnd *elementEnd = vrv_cast<PageMilestoneEnd *>(element);
         assert(elementEnd);
         assert(elementEnd->GetStart());
-        dc->StartGraphic(element, elementEnd->GetStart()->GetUuid(), element->GetUuid());
+        dc->StartGraphic(element, elementEnd->GetStart()->GetID(), element->GetID());
         dc->EndGraphic(element, this);
     }
     else if (element->Is(MDIV)) {
         // When the mdiv is not visible, then there is no start / end element
         std::string elementStart = (element->IsMilestoneElement()) ? "pageMilestone" : "";
-        dc->StartGraphic(element, elementStart, element->GetUuid());
+        dc->StartGraphic(element, elementStart, element->GetID());
         dc->EndGraphic(element, this);
     }
     else if (element->Is(SCORE)) {
-        dc->StartGraphic(element, "pageMilestone", element->GetUuid());
+        dc->StartGraphic(element, "pageMilestone", element->GetID());
         dc->EndGraphic(element, this);
     }
 }
@@ -193,7 +189,7 @@ void View::DrawSystem(DeviceContext *dc, System *system)
     assert(dc);
     assert(system);
 
-    dc->StartGraphic(system, "", system->GetUuid());
+    dc->StartGraphic(system, "", system->GetID());
 
     Measure *firstMeasure = dynamic_cast<Measure *>(system->FindDescendantByType(MEASURE, 1));
 
@@ -293,8 +289,8 @@ void View::DrawSystemList(DeviceContext *dc, System *system, const ClassId class
     }
 }
 
-void View::DrawScoreDef(
-    DeviceContext *dc, ScoreDef *scoreDef, Measure *measure, int x, BarLine *barLine, bool isLastMeasure)
+void View::DrawScoreDef(DeviceContext *dc, ScoreDef *scoreDef, Measure *measure, int x, BarLine *barLine,
+    bool isLastMeasure, bool isLastSystem)
 {
     assert(dc);
     assert(scoreDef);
@@ -311,8 +307,9 @@ void View::DrawScoreDef(
         this->DrawStaffGrp(dc, measure, staffGrp, x, true, !scoreDef->DrawLabels());
     }
     else {
-        dc->StartGraphic(barLine, "", barLine->GetUuid());
-        this->DrawBarLines(dc, measure, staffGrp, barLine, isLastMeasure);
+        dc->StartGraphic(barLine, "", barLine->GetID());
+        int yBottomPrevious = VRV_UNSET;
+        this->DrawBarLines(dc, measure, staffGrp, barLine, isLastMeasure, isLastSystem, yBottomPrevious);
         dc->EndGraphic(barLine, this);
     }
 
@@ -451,7 +448,7 @@ void View::DrawGrpSym(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp, i
         return;
     }
 
-    dc->StartGraphic(groupSymbol, "", groupSymbol->GetUuid());
+    dc->StartGraphic(groupSymbol, "", groupSymbol->GetID());
 
     const int staffSize = staffGrp->GetMaxStaffSize();
     int yTop = first->GetDrawingY();
@@ -565,7 +562,7 @@ void View::DrawLabels(
     dc->SetBrush(m_currentColour, AxSOLID);
     dc->SetFont(&labelTxt);
 
-    dc->StartGraphic(graphic, "", graphic->GetUuid());
+    dc->StartGraphic(graphic, "", graphic->GetID());
 
     dc->StartText(ToDeviceContextX(params.m_x), ToDeviceContextY(params.m_y), HORIZONTALALIGNMENT_right);
     this->DrawTextChildren(dc, graphic, params);
@@ -660,7 +657,7 @@ void View::DrawBrace(DeviceContext *dc, int x, int y1, int y2, int staffSize)
     y1 -= penWidth;
     y2 += penWidth;
     x += penWidth;
-    BoundingBox::Swap(y1, y2);
+    std::swap(y1, y2);
 
     const int fact = m_doc->GetDrawingBeamWhiteWidth(staffSize, false) + m_doc->GetDrawingStemWidth(staffSize);
     const int xdec = ToDeviceContextX(fact);
@@ -720,7 +717,8 @@ void View::DrawBrace(DeviceContext *dc, int x, int y1, int y2, int staffSize)
     return;
 }
 
-void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp, BarLine *barLine, bool isLastMeasure)
+void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp, BarLine *barLine, bool isLastMeasure,
+    bool isLastSystem, int &yBottomPrevious)
 {
     assert(dc);
     assert(measure);
@@ -731,173 +729,155 @@ void View::DrawBarLines(DeviceContext *dc, Measure *measure, StaffGrp *staffGrp,
         return;
     }
 
-    if (staffGrp->GetBarThru() != BOOLEAN_true) {
-        // recursively draw the children (staffDef or staffGrp) - we assume @barthru is false by default
-        int i;
-        StaffGrp *childStaffGrp = NULL;
-        StaffDef *childStaffDef = NULL;
-        for (i = 0; i < staffGrp->GetChildCount(); ++i) {
-            childStaffGrp = dynamic_cast<StaffGrp *>(staffGrp->GetChild(i));
-            childStaffDef = dynamic_cast<StaffDef *>(staffGrp->GetChild(i));
-            if (childStaffGrp) {
-                if (childStaffGrp->GetDrawingVisibility() == OPTIMIZATION_HIDDEN) {
-                    continue;
-                }
-                this->DrawBarLines(dc, measure, childStaffGrp, barLine, isLastMeasure);
-            }
-            else if (childStaffDef) {
-                if (childStaffDef->GetDrawingVisibility() == OPTIMIZATION_HIDDEN) {
-                    continue;
-                }
-                AttNIntegerComparison comparison(STAFF, childStaffDef->GetN());
-                Staff *staff = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparison, 1));
-                if (!staff) {
-                    LogDebug("Could not get staff (%d) while drawing staffGrp - DrawBarLines", childStaffDef->GetN());
-                    continue;
-                }
-                if (staff->GetVisible() == BOOLEAN_false) {
-                    continue;
-                }
-                // Get current form. If neighboring invisible staff make sure that at least some kind of barline is
-                // drawn
-                data_BARRENDITION form = barLine->GetForm();
-                if (measure->HasInvisibleStaffBarlines()) {
-                    data_BARRENDITION barlineRend = (barLine->GetPosition() == BarLinePosition::Right)
-                        ? measure->GetDrawingRightBarLineByStaffN(childStaffDef->GetN())
-                        : measure->GetDrawingLeftBarLineByStaffN(childStaffDef->GetN());
-                    if (barlineRend != BARRENDITION_NONE) form = barlineRend;
-                }
-                if (form == BARRENDITION_NONE) continue;
+    const bool barlineThrough = barLine->IsDrawnThrough(staffGrp);
 
-                // for the bottom position we need to take into account the number of lines and the staff size
-                int yBottom = staff->GetDrawingY()
-                    - (childStaffDef->GetLines() - 1) * m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
-                if (measure->HasBarPlace()) {
-                    // bar.place counts upwards (note order).
-                    yBottom += measure->GetBarPlace() * m_doc->GetDrawingUnit(staff->m_drawingStaffSize);
-                }
-                int yTop = staff->GetDrawingY();
-                if (measure->HasBarLen()) {
-                    yTop = yBottom + (measure->GetBarLen() * m_doc->GetDrawingUnit(staff->m_drawingStaffSize));
-                }
+    for (int i = 0; i < staffGrp->GetChildCount(); ++i) {
+        Object *child = staffGrp->GetChild(i);
+
+        // Recursive call for staff group
+        if (child->Is(STAFFGRP)) {
+            StaffGrp *childStaffGrp = vrv_cast<StaffGrp *>(child);
+            this->DrawBarLines(dc, measure, childStaffGrp, barLine, isLastMeasure, isLastSystem, yBottomPrevious);
+            continue;
+        }
+
+        // Determine the staff def
+        if (!child->Is(STAFFDEF)) continue;
+        StaffDef *staffDef = vrv_cast<StaffDef *>(child);
+        assert(staffDef);
+        if (staffDef->GetDrawingVisibility() == OPTIMIZATION_HIDDEN) {
+            continue;
+        }
+
+        // Determine the barline form
+        data_BARRENDITION form = barLine->GetForm();
+        if (!barlineThrough && (measure->HasInvisibleStaffBarlines())) {
+            data_BARRENDITION barlineRend = (barLine->GetPosition() == BarLinePosition::Right)
+                ? measure->GetDrawingRightBarLineByStaffN(staffDef->GetN())
+                : measure->GetDrawingLeftBarLineByStaffN(staffDef->GetN());
+            if (barlineRend != BARRENDITION_NONE) form = barlineRend;
+        }
+        if (form == BARRENDITION_NONE) {
+            yBottomPrevious = VRV_UNSET;
+            continue;
+        }
+
+        // Determine the method
+        const auto [hasMethod, method] = barLine->GetMethod(staffDef);
+        const bool methodMensur = hasMethod && (method == BARMETHOD_mensur);
+        const bool methodTakt = hasMethod && (method == BARMETHOD_takt);
+
+        // Get the corresponding staff
+        AttNIntegerComparison comparison(STAFF, staffDef->GetN());
+        Staff *staff = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparison, 1));
+        if (!staff) {
+            LogDebug("Could not get staff (%d) while drawing staffGrp - DrawBarLines", staffDef->GetN());
+            yBottomPrevious = VRV_UNSET;
+            continue;
+        }
+        if (!barlineThrough && (staff->GetVisible() == BOOLEAN_false)) {
+            yBottomPrevious = VRV_UNSET;
+            continue;
+        }
+        const int unit = m_doc->GetDrawingUnit(staff->m_drawingStaffSize);
+
+        // For the bottom position we need to take into account the number of lines and the staff size
+        const int yStaffTop = staff->GetDrawingY();
+        const int yStaffBottom = yStaffTop - 2 * (staffDef->GetLines() - 1) * unit;
+        int yBottom = yStaffBottom;
+        int yLength = yStaffTop - yStaffBottom;
+
+        // Adjust start and length
+        if (!methodMensur && !methodTakt) {
+            const auto [hasPlace, place] = barLine->GetPlace(staffDef);
+            if (hasPlace) {
+                // bar.place counts upwards (note order).
+                yBottom += place * unit;
+            }
+            else if (staffDef->GetLines() <= 1) {
                 // Make sure barlines are visible with a single line
-                if (childStaffDef->GetLines() <= 1) {
-                    yTop = yBottom + m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
-                    yBottom -= m_doc->GetDrawingDoubleUnit(staff->m_drawingStaffSize);
-                }
-                this->DrawBarLine(dc, yTop, yBottom, barLine, form);
-                if (barLine->HasRepetitionDots()) {
-                    this->DrawBarLineDots(dc, staff, barLine);
-                }
+                yBottom -= 2 * unit;
+            }
+
+            const auto [hasLength, length] = barLine->GetLength(staffDef);
+            if (hasLength) {
+                yLength = length * unit;
+            }
+            else if (staffDef->GetLines() <= 1) {
+                yLength = 4 * unit;
             }
         }
-    }
-    else {
-        if (barLine->GetForm() == BARRENDITION_NONE) return;
-        const ListOfObjects &staffDefs = staffGrp->GetList(staffGrp);
-        if (staffDefs.empty()) {
-            return;
+        int yTop = yBottom + yLength;
+
+        // Shift the taktstrich outwards?
+        const int yTaktstrichShift = methodMensur ? unit : 0;
+
+        // Determine which parts to draw
+        bool drawInsideStaff = !methodMensur && !methodTakt;
+        bool drawOutsideStaff = !methodTakt && barlineThrough;
+        bool drawTaktstrichAbove = (methodMensur && !barlineThrough) || methodTakt;
+        bool drawTaktstrichBelow = methodMensur && !barlineThrough;
+        if ((isLastMeasure && isLastSystem) || barLine->HasRepetitionDots()) {
+            drawInsideStaff = true;
+            drawTaktstrichAbove = false;
+            drawTaktstrichBelow = false;
         }
 
-        StaffDef *firstDef = NULL;
-        ListOfObjects::const_iterator iter;
-        for (iter = staffDefs.begin(); iter != staffDefs.end(); ++iter) {
-            StaffDef *staffDef = vrv_cast<StaffDef *>(*iter);
-            assert(staffDef);
-            if (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN) {
-                firstDef = staffDef;
-                break;
-            }
-        }
-
-        StaffDef *lastDef = NULL;
-        ListOfObjects::const_reverse_iterator riter;
-        for (riter = staffDefs.rbegin(); riter != staffDefs.rend(); ++riter) {
-            StaffDef *staffDef = vrv_cast<StaffDef *>(*riter);
-            assert(staffDef);
-            if (staffDef->GetDrawingVisibility() != OPTIMIZATION_HIDDEN) {
-                lastDef = staffDef;
-                break;
+        // Now draw the barline part inside the staff
+        if (drawInsideStaff) {
+            this->DrawBarLine(dc, yTop, yBottom, barLine, form);
+            if (barLine->HasRepetitionDots()) {
+                this->DrawBarLineDots(dc, staff, barLine);
             }
         }
 
-        if (!firstDef || !lastDef) {
-            LogDebug("Could not get staffDef while drawing staffGrp - DrawStaffGrp");
-            return;
+        // ... and the barline part outside the staff
+        if (drawOutsideStaff && (yBottomPrevious != VRV_UNSET)) {
+            // Do not erase intersections with right barline of the last measure of the system
+            const bool eraseIntersections = !isLastMeasure || (barLine->GetPosition() != BarLinePosition::Right);
+
+            this->DrawBarLine(dc, yBottomPrevious, yTop, barLine, form, true, eraseIntersections);
+        }
+        yBottomPrevious = drawOutsideStaff ? yBottom : VRV_UNSET;
+
+        // Draw the taktstrich above the staff
+        if (drawTaktstrichAbove) {
+            const int yTaktstrichCenter = yStaffTop + yTaktstrichShift;
+            this->DrawBarLine(dc, yTaktstrichCenter + unit, yTaktstrichCenter - unit, barLine, form);
         }
 
-        // Get the corresponding staff looking at the previous (or first) measure
-        AttNIntegerComparison comparisonFirst(STAFF, firstDef->GetN());
-        Staff *first = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonFirst, 1));
-        AttNIntegerComparison comparisonLast(STAFF, lastDef->GetN());
-        Staff *last = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparisonLast, 1));
-
-        if (!first || !last) {
-            LogDebug("Could not get staff (%d; %d) while drawing staffGrp - DrawStaffGrp", firstDef->GetN(),
-                lastDef->GetN());
-            return;
-        }
-
-        int yTop = first->GetDrawingY();
-        if (firstDef->GetLines() <= 1) {
-            yTop += m_doc->GetDrawingDoubleUnit(first->m_drawingStaffSize);
-        }
-        // for the bottom position we need to take into account the number of lines and the staff size
-        int yBottom
-            = last->GetDrawingY() - (lastDef->GetLines() - 1) * m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
-        if (lastDef->GetLines() <= 1) {
-            yBottom -= m_doc->GetDrawingDoubleUnit(last->m_drawingStaffSize);
-        }
-
-        const bool singleStaff = (first == last);
-        // erase intersections only if we have more than one staff
-        bool eraseIntersections = !singleStaff;
-        // do not erase intersections with right barline of the last measure of the system
-        if (isLastMeasure && (barLine->GetPosition() == BarLinePosition::Right)) {
-            eraseIntersections = false;
-        }
-        this->DrawBarLine(dc, yTop, yBottom, barLine, barLine->GetForm(), eraseIntersections, singleStaff);
-
-        // Now we have a barthru barLine, but we have dots so we still need to go through each staff
-        if (barLine->HasRepetitionDots()) {
-            StaffDef *childStaffDef = NULL;
-            const ListOfObjects &childList = staffGrp->GetList(staffGrp); // make sure it's initialized
-            for (ListOfObjects::const_reverse_iterator it = childList.rbegin(); it != childList.rend(); ++it) {
-                childStaffDef = dynamic_cast<StaffDef *>((*it));
-                if (childStaffDef) {
-                    AttNIntegerComparison comparison(STAFF, childStaffDef->GetN());
-                    Staff *staff = dynamic_cast<Staff *>(measure->FindDescendantByComparison(&comparison, 1));
-                    if (!staff) {
-                        LogDebug(
-                            "Could not get staff (%d) while drawing staffGrp - DrawBarLines", childStaffDef->GetN());
-                        continue;
-                    }
-                    this->DrawBarLineDots(dc, staff, barLine);
-                }
-            }
+        // Draw the taktstrich below the staff
+        if (drawTaktstrichBelow) {
+            const int yTaktstrichCenter = yStaffBottom - yTaktstrichShift;
+            this->DrawBarLine(dc, yTaktstrichCenter + unit, yTaktstrichCenter - unit, barLine, form);
         }
     }
 }
 
 void View::DrawBarLine(DeviceContext *dc, int yTop, int yBottom, BarLine *barLine, data_BARRENDITION form,
-    bool eraseIntersections, bool singleStaff)
+    bool inStaffSpace, bool eraseIntersections)
 {
     assert(dc);
     assert(barLine);
 
     Staff *staff = barLine->GetAncestorStaff(ANCESTOR_ONLY, false);
     const int staffSize = (staff) ? staff->m_drawingStaffSize : 100;
+    const int unit = m_doc->GetDrawingUnit(staffSize);
 
     const int x = barLine->GetDrawingX();
     const int barLineWidth = m_doc->GetDrawingBarLineWidth(staffSize);
-    const int barLineThickWidth = m_doc->GetDrawingUnit(staffSize) * m_options->m_thickBarlineThickness.GetValue();
-    const int barLineSeparation = m_doc->GetDrawingUnit(staffSize) * m_options->m_barLineSeparation.GetValue();
+    const int barLineThickWidth = unit * m_options->m_thickBarlineThickness.GetValue();
+    const int barLineSeparation = unit * m_options->m_barLineSeparation.GetValue();
     const int barLinesSum = barLineThickWidth + barLineWidth;
     int x2 = x + barLineSeparation;
 
-    // optimized for five line staves
-    int dashLength = m_doc->GetDrawingUnit(staffSize) * 16 / 13;
-    int dotLength = m_doc->GetDrawingUnit(staffSize) * 4 / 13;
+    const int dashLength = unit * m_options->m_dashedBarLineDashLength.GetValue();
+    const int gapLength = unit * m_options->m_dashedBarLineGapLength.GetValue();
+    if (inStaffSpace && ((form == BARRENDITION_dashed) || (form == BARRENDITION_dbldashed))) {
+        // Dashed lines in staff space should start with a gap
+        yTop -= dashLength;
+        yBottom += dashLength;
+    }
 
     SegmentedLine line(yTop, yBottom);
     // We do not need to do this during layout calculation
@@ -924,7 +904,7 @@ void View::DrawBarLine(DeviceContext *dc, int yTop, int yBottom, BarLine *barLin
             lines.SetParent(system);
             lines.UpdateContentBBoxX(minX, maxX);
             lines.UpdateContentBBoxY(yTop, yBottom);
-            int margin = m_doc->GetDrawingUnit(staffSize) / 2;
+            int margin = unit / 2;
             system->m_systemAligner.FindAllIntersectionPoints(line, lines, { DIR, DYNAM, TEMPO }, margin);
         }
     }
@@ -934,15 +914,10 @@ void View::DrawBarLine(DeviceContext *dc, int yTop, int yBottom, BarLine *barLin
             this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
             break;
         case BARRENDITION_dashed: //
-            this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength);
+            this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength, gapLength);
             break;
         case BARRENDITION_dotted: //
-            if (singleStaff) {
-                this->DrawVerticalDots(dc, x, line, barLineWidth, m_doc->GetDrawingDoubleUnit(staffSize));
-            }
-            else {
-                this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dotLength);
-            }
+            this->DrawVerticalDots(dc, x, line, barLineWidth, 2 * unit);
             break;
         case BARRENDITION_rptend:
             this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth);
@@ -970,12 +945,12 @@ void View::DrawBarLine(DeviceContext *dc, int yTop, int yBottom, BarLine *barLin
             this->DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth);
             break;
         case BARRENDITION_dbldashed:
-            this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength);
-            this->DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth, dashLength);
+            this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dashLength, gapLength);
+            this->DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth, dashLength, gapLength);
             break;
         case BARRENDITION_dbldotted:
-            this->DrawVerticalSegmentedLine(dc, x, line, barLineWidth, dotLength);
-            this->DrawVerticalSegmentedLine(dc, x2 + barLineWidth, line, barLineWidth, dotLength);
+            this->DrawVerticalDots(dc, x, line, barLineWidth, 2 * unit);
+            this->DrawVerticalDots(dc, x2 + barLineWidth, line, barLineWidth, 2 * unit);
             break;
         default:
             // Use solid barline as fallback
@@ -1041,7 +1016,7 @@ void View::DrawMeasure(DeviceContext *dc, Measure *measure, System *system)
 
     // This is a special case where we do not draw (SVG, Bounding boxes, etc.) the measure for unmeasured music
     if (measure->IsMeasuredMusic()) {
-        dc->StartGraphic(measure, "", measure->GetUuid());
+        dc->StartGraphic(measure, "", measure->GetID());
     }
 
     if (m_drawingScoreDef.GetMnumVisible() != BOOLEAN_false) {
@@ -1087,9 +1062,8 @@ void View::DrawMeasure(DeviceContext *dc, Measure *measure, System *system)
                 measure->GetLeftBarLine());
         }
         if ((measure->GetDrawingRightBarLine() != BARRENDITION_NONE) || measure->HasInvisibleStaffBarlines()) {
-            bool isLast = (measure == system->FindDescendantByType(MEASURE, 1, BACKWARD)) ? true : false;
             this->DrawScoreDef(dc, system->GetDrawingScoreDef(), measure, measure->GetRightBarLine()->GetDrawingX(),
-                measure->GetRightBarLine(), isLast);
+                measure->GetRightBarLine(), measure->IsLastInSystem(), system->IsLastOfMdiv());
         }
     }
 
@@ -1115,7 +1089,7 @@ void View::DrawMeterSigGrp(DeviceContext *dc, Layer *layer, Staff *staff)
 
     const int unit = m_doc->GetDrawingUnit(glyphSize);
     int offset = 0;
-    dc->StartGraphic(meterSigGrp, "", meterSigGrp->GetUuid());
+    dc->StartGraphic(meterSigGrp, "", meterSigGrp->GetID());
     // Draw meterSigGrp by alternating meterSig and plus sign (when required)
     for (auto iter = childList.begin(); iter != childList.end(); ++iter) {
         MeterSig *meterSig = vrv_cast<MeterSig *>(*iter);
@@ -1151,7 +1125,7 @@ void View::DrawMNum(DeviceContext *dc, MNum *mnum, Measure *measure, int yOffset
     Staff *staff = measure->GetTopVisibleStaff();
     if (staff) {
 
-        dc->StartGraphic(mnum, "", mnum->GetUuid());
+        dc->StartGraphic(mnum, "", mnum->GetID());
 
         FontInfo mnumTxt;
         if (!dc->UseGlobalStyling()) {
@@ -1216,7 +1190,7 @@ void View::DrawStaff(DeviceContext *dc, Staff *staff, Measure *measure, System *
         return;
     }
 
-    dc->StartGraphic(staff, "", staff->GetUuid());
+    dc->StartGraphic(staff, "", staff->GetID());
 
     if (m_doc->GetType() == Facs) {
         staff->SetFromFacsimile(m_doc);
@@ -1246,7 +1220,7 @@ void View::DrawStaff(DeviceContext *dc, Staff *staff, Measure *measure, System *
     this->DrawStaffDefCautionary(dc, staff, measure);
 
     for (auto &spanningElement : staff->m_timeSpanningElements) {
-        system->AddToDrawingListIfNeccessary(spanningElement);
+        system->AddToDrawingListIfNecessary(spanningElement);
     }
 
     dc->EndGraphic(staff, this);
@@ -1330,8 +1304,8 @@ void View::DrawLedgerLines(DeviceContext *dc, Staff *staff, const ArrayOfLedgerL
 
     if (below) {
         gClass = "below";
-        y -= ySpace * (staff->m_drawingLines - 1);
-        ySpace = -ySpace;
+        ySpace *= -1;
+        y += ySpace * (staff->m_drawingLines - 1);
     }
     y += ySpace;
 
@@ -1373,7 +1347,7 @@ void View::DrawStaffDef(DeviceContext *dc, Staff *staff, Measure *measure)
     if (!layer || !layer->HasStaffDef()) return;
 
     // StaffDef staffDef;
-    // dc->StartGraphic(&staffDef, "", staffDef.GetUuid());
+    // dc->StartGraphic(&staffDef, "", staffDef.GetID());
 
     // draw the scoreDef if required
     if (layer->GetStaffDefClef()) {
@@ -1406,7 +1380,7 @@ void View::DrawStaffDefCautionary(DeviceContext *dc, Staff *staff, Measure *meas
     if (!layer || !layer->HasCautionStaffDef()) return;
 
     // StaffDef staffDef;
-    // dc->StartGraphic(&staffDef, "cautionary", staffDef.GetUuid());
+    // dc->StartGraphic(&staffDef, "cautionary", staffDef.GetID());
 
     // draw the scoreDef if required
     if (layer->GetCautionStaffDefClef()) {
@@ -1489,7 +1463,7 @@ void View::DrawLayer(DeviceContext *dc, Layer *layer, Staff *staff, Measure *mea
 
     // Now start to draw the layer content
 
-    dc->StartGraphic(layer, "", layer->GetUuid());
+    dc->StartGraphic(layer, "", layer->GetID());
 
     this->DrawLayerChildren(dc, layer, layer, staff, measure);
 
@@ -1793,7 +1767,7 @@ void View::DrawSystemEditorialElement(DeviceContext *dc, EditorialElement *eleme
     std::string elementStart;
     if (element->IsMilestoneElement()) elementStart = "systemElementStart";
 
-    dc->StartGraphic(element, elementStart, element->GetUuid());
+    dc->StartGraphic(element, elementStart, element->GetID());
     // EditorialElements at the system level that are visible have no children
     // if (element->m_visibility == Visible) {
     //    DrawSystemChildren(dc, element, system);
@@ -1815,7 +1789,7 @@ void View::DrawMeasureEditorialElement(DeviceContext *dc, EditorialElement *elem
         assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_MEASURE));
     }
 
-    dc->StartGraphic(element, "", element->GetUuid());
+    dc->StartGraphic(element, "", element->GetID());
     if (element->m_visibility == Visible) {
         this->DrawMeasureChildren(dc, element, measure, system);
     }
@@ -1836,7 +1810,7 @@ void View::DrawStaffEditorialElement(DeviceContext *dc, EditorialElement *elemen
         assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_STAFF));
     }
 
-    dc->StartGraphic(element, "", element->GetUuid());
+    dc->StartGraphic(element, "", element->GetID());
     if (element->m_visibility == Visible) {
         this->DrawStaffChildren(dc, element, staff, measure);
     }
@@ -1858,7 +1832,7 @@ void View::DrawLayerEditorialElement(
         assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_LAYER));
     }
 
-    dc->StartGraphic(element, "", element->GetUuid());
+    dc->StartGraphic(element, "", element->GetID());
     if (element->m_visibility == Visible) {
         this->DrawLayerChildren(dc, element, layer, staff, measure);
     }
@@ -1879,7 +1853,7 @@ void View::DrawTextEditorialElement(DeviceContext *dc, EditorialElement *element
         assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_TEXT));
     }
 
-    dc->StartTextGraphic(element, "", element->GetUuid());
+    dc->StartTextGraphic(element, "", element->GetID());
     if (element->m_visibility == Visible) {
         this->DrawTextChildren(dc, element, params);
     }
@@ -1900,7 +1874,7 @@ void View::DrawFbEditorialElement(DeviceContext *dc, EditorialElement *element, 
         assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_FB));
     }
 
-    dc->StartTextGraphic(element, "", element->GetUuid());
+    dc->StartTextGraphic(element, "", element->GetID());
     if (element->m_visibility == Visible) {
         this->DrawFbChildren(dc, element, params);
     }
@@ -1921,7 +1895,7 @@ void View::DrawRunningEditorialElement(DeviceContext *dc, EditorialElement *elem
         assert(dynamic_cast<Choice *>(element) && (dynamic_cast<Choice *>(element)->GetLevel() == EDITORIAL_RUNNING));
     }
 
-    dc->StartGraphic(element, "", element->GetUuid());
+    dc->StartGraphic(element, "", element->GetID());
     if (element->m_visibility == Visible) {
         this->DrawRunningChildren(dc, element, params);
     }
@@ -1933,10 +1907,10 @@ void View::DrawAnnot(DeviceContext *dc, EditorialElement *element, bool isTextEl
     assert(element);
 
     if (isTextElement) {
-        dc->StartTextGraphic(element, "", element->GetUuid());
+        dc->StartTextGraphic(element, "", element->GetID());
     }
     else {
-        dc->StartGraphic(element, "", element->GetUuid());
+        dc->StartGraphic(element, "", element->GetID());
     }
 
     Annot *annot = vrv_cast<Annot *>(element);

@@ -5,10 +5,12 @@
 // Copyright (c) Authors and others. All rights reserved.
 /////////////////////////////////////////////////////////////////////////////
 
+#include "layerelement.h"
+
 //----------------------------------------------------------------------------
 
 #include <algorithm>
-#include <assert.h>
+#include <cassert>
 #include <climits>
 #include <math.h>
 #include <numeric>
@@ -51,6 +53,7 @@
 #include "smufl.h"
 #include "space.h"
 #include "staff.h"
+#include "stem.h"
 #include "syl.h"
 #include "tabgrp.h"
 #include "tie.h"
@@ -1175,7 +1178,7 @@ int LayerElement::AlignHorizontally(FunctorParams *functorParams)
     AlignHorizontallyParams *params = vrv_params_cast<AlignHorizontallyParams *>(functorParams);
     assert(params);
 
-    // if (m_alignment) LogDebug("Element %s %s", this->GetUuid().c_str(), this->GetClassName().c_str());
+    // if (m_alignment) LogDebug("Element %s %s", this->GetID().c_str(), this->GetClassName().c_str());
     assert(!m_alignment);
 
     if (this->IsScoreDefElement()) return FUNCTOR_SIBLINGS;
@@ -1830,10 +1833,10 @@ std::pair<int, bool> LayerElement::CalcElementHorizontalOverlap(const Doc *doc,
             if (unison && currentNote->IsUnisonWith(previousNote, false)) {
                 int previousDuration = previousNote->GetDrawingDur();
                 assert(previousNote->GetParent());
-                const bool isPreviousCoord = previousNote->GetParent()->Is(CHORD);
+                const bool isPreviousChord = previousNote->GetParent()->Is(CHORD);
                 bool isEdgeElement = false;
                 data_STEMDIRECTION stemDir = currentNote->GetDrawingStemDir();
-                if (isPreviousCoord) {
+                if (isPreviousChord) {
                     Chord *parentChord = vrv_cast<Chord *>(previousNote->GetParent());
                     previousDuration = parentChord->GetDur();
                     isEdgeElement = ((STEMDIRECTION_down == stemDir) && (parentChord->GetBottomNote() == previousNote))
@@ -1843,10 +1846,9 @@ std::pair<int, bool> LayerElement::CalcElementHorizontalOverlap(const Doc *doc,
                 else if ((currentNote->GetDrawingDur() == DUR_1) && (previousDuration == DUR_1)) {
                     horizontalMargin = 0;
                 }
-                if (!isPreviousCoord || isEdgeElement || isChordElement) {
+                if (!isPreviousChord || isEdgeElement || isChordElement) {
                     if ((currentNote->GetDrawingDur() == DUR_2) && (previousDuration == DUR_2)) {
                         isInUnison = true;
-                        continue;
                     }
                     else if ((!currentNote->IsGraceNote() && !currentNote->GetDrawingCueSize())
                         && (previousNote->IsGraceNote() || previousNote->GetDrawingCueSize())
@@ -1863,7 +1865,18 @@ std::pair<int, bool> LayerElement::CalcElementHorizontalOverlap(const Doc *doc,
                     }
                     else if ((currentNote->GetDrawingDur() > DUR_2) && (previousDuration > DUR_2)) {
                         isInUnison = true;
+                    }
+                    if (isInUnison && (currentNote->GetDots() == previousNote->GetDots())) {
                         continue;
+                    }
+                    else {
+                        isInUnison = false;
+                        if ((currentNote->GetDrawingDur() <= DUR_1) || (previousNote->GetDrawingDur() <= DUR_1)) {
+                            horizontalMargin *= -1;
+                        }
+                        else {
+                            horizontalMargin *= (currentNote->GetDots() >= previousNote->GetDots()) ? 0 : -1;
+                        }
                     }
                 }
                 else {
@@ -1926,7 +1939,7 @@ std::pair<int, bool> LayerElement::CalcElementHorizontalOverlap(const Doc *doc,
                 shift -= HorizontalRightOverlap(otherElements.at(i), doc, -shift, verticalMargin);
                 if (!isUnisonElement) shift -= horizontalMargin;
             }
-            else if ((horizontalMargin >= 0) || isChordElement) {
+            else if (isChordElement) {
                 shift += HorizontalLeftOverlap(otherElements.at(i), doc, horizontalMargin - shift, verticalMargin);
 
                 // Make additional adjustments for cross-staff and unison notes
@@ -2240,7 +2253,7 @@ int LayerElement::PrepareCrossStaff(FunctorParams *functorParams)
     m_crossStaff = dynamic_cast<Staff *>(params->m_currentMeasure->FindDescendantByComparison(&comparisonFirst, 1));
     if (!m_crossStaff) {
         LogWarning("Could not get the cross staff reference '%d' for element '%s'", crossElement->GetStaff().at(0),
-            this->GetUuid().c_str());
+            this->GetID().c_str());
         return FUNCTOR_CONTINUE;
     }
 
@@ -2248,7 +2261,7 @@ int LayerElement::PrepareCrossStaff(FunctorParams *functorParams)
     // Check if we have a cross-staff to itself...
     if (m_crossStaff == parentStaff) {
         LogWarning("The cross staff reference '%d' for element '%s' seems to be identical to the parent staff",
-            crossElement->GetStaff().at(0), this->GetUuid().c_str());
+            crossElement->GetStaff().at(0), this->GetID().c_str());
         m_crossStaff = NULL;
         return FUNCTOR_CONTINUE;
     }
@@ -2269,7 +2282,7 @@ int LayerElement::PrepareCrossStaff(FunctorParams *functorParams)
     if (!m_crossLayer) {
         // Nothing we can do
         LogWarning("Could not get the layer with cross-staff reference '%d' for element '%s'",
-            crossElement->GetStaff().at(0), this->GetUuid().c_str());
+            crossElement->GetStaff().at(0), this->GetID().c_str());
         m_crossStaff = NULL;
     }
 
@@ -2502,7 +2515,7 @@ int LayerElement::LayerElementsInTimeSpan(FunctorParams *functorParams) const
     return this->Is(CHORD) ? FUNCTOR_SIBLINGS : FUNCTOR_CONTINUE;
 }
 
-int LayerElement::FindSpannedLayerElements(FunctorParams *functorParams)
+int LayerElement::FindSpannedLayerElements(FunctorParams *functorParams) const
 {
     FindSpannedLayerElementsParams *params = vrv_params_cast<FindSpannedLayerElementsParams *>(functorParams);
     assert(params);
@@ -2517,17 +2530,17 @@ int LayerElement::FindSpannedLayerElements(FunctorParams *functorParams)
         && (this->GetContentLeft() < params->m_maxPos)) {
 
         // We skip the start or end of the slur
-        LayerElement *start = params->m_interface->GetStart();
-        LayerElement *end = params->m_interface->GetEnd();
+        const LayerElement *start = params->m_interface->GetStart();
+        const LayerElement *end = params->m_interface->GetEnd();
         if ((this == start) || (this == end)) {
             return FUNCTOR_CONTINUE;
         }
 
         // Skip if neither parent staff nor cross staff matches the given staff number
         if (!params->m_staffNs.empty()) {
-            Staff *staff = this->GetAncestorStaff();
+            const Staff *staff = this->GetAncestorStaff();
             if (params->m_staffNs.find(staff->GetN()) == params->m_staffNs.end()) {
-                Layer *layer = NULL;
+                const Layer *layer = NULL;
                 staff = this->GetCrossStaff(layer);
                 if (!staff || (params->m_staffNs.find(staff->GetN()) == params->m_staffNs.end())) {
                     return FUNCTOR_CONTINUE;
@@ -2546,15 +2559,15 @@ int LayerElement::FindSpannedLayerElements(FunctorParams *functorParams)
 
         // Skip elements aligned at start/end, but on a different staff
         if ((this->GetAlignment() == start->GetAlignment()) && !start->Is(TIMESTAMP_ATTR)) {
-            Staff *staff = this->GetAncestorStaff(RESOLVE_CROSS_STAFF);
-            Staff *startStaff = start->GetAncestorStaff(RESOLVE_CROSS_STAFF);
+            const Staff *staff = this->GetAncestorStaff(RESOLVE_CROSS_STAFF);
+            const Staff *startStaff = start->GetAncestorStaff(RESOLVE_CROSS_STAFF);
             if (staff->GetN() != startStaff->GetN()) {
                 return FUNCTOR_CONTINUE;
             }
         }
         if ((this->GetAlignment() == end->GetAlignment()) && !end->Is(TIMESTAMP_ATTR)) {
-            Staff *staff = this->GetAncestorStaff(RESOLVE_CROSS_STAFF);
-            Staff *endStaff = end->GetAncestorStaff(RESOLVE_CROSS_STAFF);
+            const Staff *staff = this->GetAncestorStaff(RESOLVE_CROSS_STAFF);
+            const Staff *endStaff = end->GetAncestorStaff(RESOLVE_CROSS_STAFF);
             if (staff->GetN() != endStaff->GetN()) {
                 return FUNCTOR_CONTINUE;
             }

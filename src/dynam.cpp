@@ -9,7 +9,7 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 #include <sstream>
 
 //----------------------------------------------------------------------------
@@ -26,8 +26,8 @@
 namespace vrv {
 
 #define DYNAM_CHARS 7
-std::wstring dynamChars[] = { L"p", L"m", L"f", L"r", L"s", L"z", L"n" };
-std::wstring dynamSmufl[] = { L"\uE520", L"\uE521", L"\uE522", L"\uE523", L"\uE524", L"\uE525", L"\uE526" };
+const std::wstring dynamChars[] = { L"p", L"m", L"f", L"r", L"s", L"z", L"n" };
+const std::wstring dynamSmufl[] = { L"\uE520", L"\uE521", L"\uE522", L"\uE523", L"\uE524", L"\uE525", L"\uE526" };
 
 //----------------------------------------------------------------------------
 // Dynam
@@ -86,7 +86,7 @@ bool Dynam::IsSupportedChild(Object *child)
     return true;
 }
 
-bool Dynam::IsSymbolOnly()
+bool Dynam::IsSymbolOnly() const
 {
     m_symbolStr = L"";
     std::wstring str = this->GetText(this);
@@ -118,7 +118,7 @@ std::pair<wchar_t, wchar_t> Dynam::GetEnclosingGlyphs() const
 // Static methods for Dynam
 //----------------------------------------------------------------------------
 
-bool Dynam::GetSymbolsInStr(std::wstring &str, ArrayOfStringDynamTypePairs &tokens)
+bool Dynam::GetSymbolsInStr(const std::wstring &str, ArrayOfStringDynamTypePairs &tokens)
 {
     tokens.clear();
 

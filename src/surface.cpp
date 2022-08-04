@@ -9,13 +9,12 @@
 
 //----------------------------------------------------------------------------
 
-#include <assert.h>
+#include <cassert>
 
 //----------------------------------------------------------------------------
 
 #include "comparison.h"
 #include "facsimile.h"
-#include "object.h"
 #include "vrv.h"
 #include "zone.h"
 
